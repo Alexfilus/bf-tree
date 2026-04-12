@@ -19,6 +19,7 @@ pub mod metric;
 
 mod mini_page_op;
 mod range_scan;
+mod simd;
 mod storage;
 pub(crate) mod sync;
 #[cfg(test)]

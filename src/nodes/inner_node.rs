@@ -270,14 +270,13 @@ impl InnerNode {
         let prefix_key = &meta.key_prefix
             [0..std::cmp::min(InnerKVMeta::KEY_LOOK_AHEAD_SIZE, meta.key_len as usize)];
 
-        let mut cmp = prefix_key.cmp(search_key_prefix);
+        let cmp = prefix_key.cmp(search_key_prefix);
         if cmp != Ordering::Equal {
             return cmp;
         }
 
         let rest_key = self.get_post_key_ref(meta);
-        cmp = rest_key.cmp(search_key_postfix);
-        cmp
+        crate::simd::bytes_cmp(rest_key, search_key_postfix)
     }
 
     pub(crate) fn lower_bound(&self, key: &[u8]) -> u64 {
@@ -296,13 +295,12 @@ impl InnerNode {
 
             let mut cmp = prefix_key.cmp(search_key_prefix);
 
-            // If prefix compare is the same, we need to compare the full key.
             if cmp == Ordering::Equal
                 && ((key_meta.key_len > InnerKVMeta::KEY_LOOK_AHEAD_SIZE as u16)
                     || !search_key_postfix.is_empty())
             {
                 let rest_key = self.get_post_key_ref(key_meta);
-                cmp = rest_key.cmp(search_key_postfix);
+                cmp = crate::simd::bytes_cmp(rest_key, search_key_postfix);
             }
 
             match cmp {

@@ -11,6 +11,7 @@ use crate::{
 
 use super::{node_meta::NodeMeta, FENCE_KEY_CNT};
 
+
 /// Invariant: leaf page can only have Insert and Delete type.
 ///            mini page can have all.
 #[repr(u8)]
@@ -59,15 +60,7 @@ const REF_BIT_MASK: u16 = 0x80_00;
 const VALUE_LEN_MASK: u16 = 0x7F_FF; // lower 15 bits on the value_len;
 
 pub(crate) fn common_prefix_len(low_fence: &[u8], high_fence: &[u8]) -> u16 {
-    let mut prefix_len = 0;
-    for i in 0..std::cmp::min(low_fence.len(), high_fence.len()) {
-        if low_fence[i] == high_fence[i] {
-            prefix_len += 1;
-        } else {
-            break;
-        }
-    }
-    prefix_len
+    crate::simd::common_prefix_len(low_fence, high_fence)
 }
 
 #[repr(C)]
@@ -978,11 +971,10 @@ impl LeafNode {
         )];
         let mut cmp = prefix_key.cmp(search_key_prefix);
 
-        // If the prefix matches, compare the full key
         if cmp == Ordering::Equal {
             let full_key = self.get_remaining_key(meta);
             let search_key_postfix = &key[self.prefix_len as usize..];
-            cmp = full_key.cmp(search_key_postfix);
+            cmp = crate::simd::bytes_cmp(full_key, search_key_postfix);
         }
         cmp
     }
@@ -1031,11 +1023,10 @@ impl LeafNode {
             )];
             let mut cmp = prefix_key.cmp(search_key_prefix);
 
-            // If the prefix matches, compare the full key
             if cmp == Ordering::Equal {
                 let remaining_key = self.get_remaining_key(key_meta);
                 let search_key_postfix = &key[self.prefix_len as usize..];
-                cmp = remaining_key.cmp(search_key_postfix);
+                cmp = crate::simd::bytes_cmp(remaining_key, search_key_postfix);
             }
 
             match cmp {
