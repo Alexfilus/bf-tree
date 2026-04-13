@@ -23,161 +23,231 @@ use std::arch::x86_64::*;
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::*;
 
-#[cfg(target_arch = "x86_64")]
-fn common_prefix_len_simd(a: &[u8], b: &[u8]) -> u16 {
-    let min_len = std::cmp::min(a.len(), b.len());
-
-    if min_len < 16 {
-        return common_prefix_len_scalar(a, b);
-    }
-
-    let mut prefix_len: usize = 0;
-
-    unsafe {
-        while prefix_len + 16 <= min_len {
-            let a_chunk = _mm_loadu_si128(a.as_ptr().add(prefix_len) as *const __m128i);
-            let b_chunk = _mm_loadu_si128(b.as_ptr().add(prefix_len) as *const __m128i);
-
-            let cmp = _mm_cmpeq_epi8(a_chunk, b_chunk);
-            let mask = _mm_movemask_epi8(cmp) as u32;
-
-            if mask != 0xFFFF {
-                let first_diff = (!mask).trailing_zeros() as usize;
-                return (prefix_len + first_diff) as u16;
-            }
-
-            prefix_len += 16;
-        }
-    }
-
-    while prefix_len < min_len {
-        if a[prefix_len] != b[prefix_len] {
-            return prefix_len as u16;
-        }
-        prefix_len += 1;
-    }
-
-    prefix_len as u16
-}
-
-#[cfg(target_arch = "aarch64")]
-fn common_prefix_len_simd(a: &[u8], b: &[u8]) -> u16 {
-    let min_len = std::cmp::min(a.len(), b.len());
-
-    if min_len < 16 {
-        return common_prefix_len_scalar(a, b);
-    }
-
-    let mut prefix_len: usize = 0;
-
-    unsafe {
-        while prefix_len + 16 <= min_len {
-            let a_chunk = vld1q_u8(a.as_ptr().add(prefix_len));
-            let b_chunk = vld1q_u8(b.as_ptr().add(prefix_len));
-
-            let cmp = vceqq_u8(a_chunk, b_chunk);
-            let cmp_u64: uint64x2_t = vreinterpretq_u64_u8(cmp);
-
-            let low = vgetq_lane_u64(cmp_u64, 0);
-            let high = vgetq_lane_u64(cmp_u64, 1);
-
-            if low != u64::MAX {
-                let first_diff = (!low).trailing_zeros() as usize / 8;
-                return (prefix_len + first_diff) as u16;
-            }
-            if high != u64::MAX {
-                let first_diff = 8 + (!high).trailing_zeros() as usize / 8;
-                return (prefix_len + first_diff) as u16;
-            }
-
-            prefix_len += 16;
-        }
-    }
-
-    while prefix_len < min_len {
-        if a[prefix_len] != b[prefix_len] {
-            return prefix_len as u16;
-        }
-        prefix_len += 1;
-    }
-
-    prefix_len as u16
-}
-
 use std::cmp::Ordering;
 
 fn bytes_cmp_scalar(a: &[u8], b: &[u8]) -> Ordering {
     a.cmp(b)
 }
 
-#[cfg(target_arch = "x86_64")]
-fn bytes_cmp_simd(a: &[u8], b: &[u8]) -> Ordering {
-    let min_len = std::cmp::min(a.len(), b.len());
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+fn common_prefix_len_simd(a: &[u8], b: &[u8]) -> u16 {
+    let min_len = a.len().min(b.len());
+    first_mismatch(a, b).unwrap_or(min_len) as u16
+}
 
-    if min_len < 16 {
-        return a.cmp(b);
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+fn bytes_cmp_optimized(a: &[u8], b: &[u8]) -> Ordering {
+    #[cfg(target_arch = "x86_64")]
+    {
+        if let Some(idx) = first_mismatch(a, b) {
+            return a[idx].cmp(&b[idx]);
+        }
+
+        return a.len().cmp(&b.len());
     }
 
-    let mut offset = 0;
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        a.cmp(b)
+    }
+}
 
-    unsafe {
-        while offset + 16 <= min_len {
-            let a_chunk = _mm_loadu_si128(a.as_ptr().add(offset) as *const __m128i);
-            let b_chunk = _mm_loadu_si128(b.as_ptr().add(offset) as *const __m128i);
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+fn first_mismatch(a: &[u8], b: &[u8]) -> Option<usize> {
+    let min_len = a.len().min(b.len());
+    if min_len == 0 {
+        return None;
+    }
 
-            let cmp = _mm_cmpeq_epi8(a_chunk, b_chunk);
-            let mask = _mm_movemask_epi8(cmp) as u32;
+    #[cfg(target_arch = "x86_64")]
+    {
+        if min_len >= 32 && std::arch::is_x86_feature_detected!("avx2") {
+            return unsafe { first_mismatch_avx2(a, b, min_len) };
+        }
 
-            if mask != 0xFFFF {
-                let first_diff = (!mask).trailing_zeros() as usize;
-                let idx = offset + first_diff;
-                return a[idx].cmp(&b[idx]);
-            }
-
-            offset += 16;
+        if min_len >= 16 {
+            return unsafe { first_mismatch_sse2(a, b, min_len) };
         }
     }
 
-    a[offset..].cmp(&b[offset..])
+    #[cfg(target_arch = "aarch64")]
+    {
+        if min_len >= 16 {
+            return unsafe { first_mismatch_neon(a, b, min_len) };
+        }
+    }
+
+    scalar_mismatch_from(a, b, 0, min_len)
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2")]
+unsafe fn first_mismatch_avx2(a: &[u8], b: &[u8], min_len: usize) -> Option<usize> {
+    let mut offset = 0;
+
+    while offset + 32 <= min_len {
+        let a_chunk = unsafe { _mm256_loadu_si256(a.as_ptr().add(offset) as *const __m256i) };
+        let b_chunk = unsafe { _mm256_loadu_si256(b.as_ptr().add(offset) as *const __m256i) };
+        let mask = _mm256_movemask_epi8(_mm256_cmpeq_epi8(a_chunk, b_chunk)) as u32;
+
+        if mask != u32::MAX {
+            return Some(offset + (!mask).trailing_zeros() as usize);
+        }
+
+        offset += 32;
+    }
+
+    unsafe { first_mismatch_sse2_from(a, b, offset, min_len) }
+}
+
+#[cfg(target_arch = "x86_64")]
+unsafe fn first_mismatch_sse2(a: &[u8], b: &[u8], min_len: usize) -> Option<usize> {
+    unsafe { first_mismatch_sse2_from(a, b, 0, min_len) }
+}
+
+#[cfg(target_arch = "x86_64")]
+unsafe fn first_mismatch_sse2_from(
+    a: &[u8],
+    b: &[u8],
+    mut offset: usize,
+    min_len: usize,
+) -> Option<usize> {
+    while offset + 32 <= min_len {
+        let a_chunk0 = unsafe { _mm_loadu_si128(a.as_ptr().add(offset) as *const __m128i) };
+        let b_chunk0 = unsafe { _mm_loadu_si128(b.as_ptr().add(offset) as *const __m128i) };
+        let mask0 = _mm_movemask_epi8(_mm_cmpeq_epi8(a_chunk0, b_chunk0)) as u32;
+
+        if mask0 != 0xFFFF {
+            return Some(offset + (!mask0).trailing_zeros() as usize);
+        }
+
+        let a_chunk1 = unsafe { _mm_loadu_si128(a.as_ptr().add(offset + 16) as *const __m128i) };
+        let b_chunk1 = unsafe { _mm_loadu_si128(b.as_ptr().add(offset + 16) as *const __m128i) };
+        let mask1 = _mm_movemask_epi8(_mm_cmpeq_epi8(a_chunk1, b_chunk1)) as u32;
+
+        if mask1 != 0xFFFF {
+            return Some(offset + 16 + (!mask1).trailing_zeros() as usize);
+        }
+
+        offset += 32;
+    }
+
+    while offset + 16 <= min_len {
+        let a_chunk = unsafe { _mm_loadu_si128(a.as_ptr().add(offset) as *const __m128i) };
+        let b_chunk = unsafe { _mm_loadu_si128(b.as_ptr().add(offset) as *const __m128i) };
+        let mask = _mm_movemask_epi8(_mm_cmpeq_epi8(a_chunk, b_chunk)) as u32;
+
+        if mask != 0xFFFF {
+            return Some(offset + (!mask).trailing_zeros() as usize);
+        }
+
+        offset += 16;
+    }
+
+    scalar_mismatch_from(a, b, offset, min_len)
 }
 
 #[cfg(target_arch = "aarch64")]
-fn bytes_cmp_simd(a: &[u8], b: &[u8]) -> Ordering {
-    let min_len = std::cmp::min(a.len(), b.len());
-
-    if min_len < 16 {
-        return a.cmp(b);
-    }
-
+unsafe fn first_mismatch_neon(a: &[u8], b: &[u8], min_len: usize) -> Option<usize> {
     let mut offset = 0;
 
-    unsafe {
-        while offset + 16 <= min_len {
-            let a_chunk = vld1q_u8(a.as_ptr().add(offset));
-            let b_chunk = vld1q_u8(b.as_ptr().add(offset));
-
-            let cmp = vceqq_u8(a_chunk, b_chunk);
-            let cmp_u64: uint64x2_t = vreinterpretq_u64_u8(cmp);
-
-            let low = vgetq_lane_u64(cmp_u64, 0);
-            let high = vgetq_lane_u64(cmp_u64, 1);
-
-            if low != u64::MAX {
-                let first_diff = (!low).trailing_zeros() as usize / 8;
-                let idx = offset + first_diff;
-                return a[idx].cmp(&b[idx]);
-            }
-            if high != u64::MAX {
-                let first_diff = 8 + (!high).trailing_zeros() as usize / 8;
-                let idx = offset + first_diff;
-                return a[idx].cmp(&b[idx]);
-            }
-
-            offset += 16;
+    while offset + 32 <= min_len {
+        if let Some(first_diff) =
+            unsafe { neon_chunk_mismatch_offset(a.as_ptr().add(offset), b.as_ptr().add(offset)) }
+        {
+            return Some(offset + first_diff);
         }
+        if let Some(first_diff) = unsafe {
+            neon_chunk_mismatch_offset(a.as_ptr().add(offset + 16), b.as_ptr().add(offset + 16))
+        } {
+            return Some(offset + 16 + first_diff);
+        }
+
+        offset += 32;
     }
 
-    a[offset..].cmp(&b[offset..])
+    while offset + 16 <= min_len {
+        if let Some(first_diff) =
+            unsafe { neon_chunk_mismatch_offset(a.as_ptr().add(offset), b.as_ptr().add(offset)) }
+        {
+            return Some(offset + first_diff);
+        }
+
+        offset += 16;
+    }
+
+    scalar_mismatch_from(a, b, offset, min_len)
+}
+
+#[cfg(target_arch = "aarch64")]
+unsafe fn neon_chunk_mismatch_offset(a: *const u8, b: *const u8) -> Option<usize> {
+    let a_chunk = unsafe { vld1q_u8(a) };
+    let b_chunk = unsafe { vld1q_u8(b) };
+    let cmp_u64: uint64x2_t = vreinterpretq_u64_u8(vceqq_u8(a_chunk, b_chunk));
+
+    let low = vgetq_lane_u64(cmp_u64, 0);
+    if low != u64::MAX {
+        return Some(first_diff_byte_in_all_ones_mask_u64(low));
+    }
+
+    let high = vgetq_lane_u64(cmp_u64, 1);
+    if high != u64::MAX {
+        return Some(8 + first_diff_byte_in_all_ones_mask_u64(high));
+    }
+
+    None
+}
+
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+fn scalar_mismatch_from(a: &[u8], b: &[u8], mut offset: usize, min_len: usize) -> Option<usize> {
+    const WORD_BYTES: usize = std::mem::size_of::<usize>();
+
+    while offset + WORD_BYTES <= min_len {
+        let a_word = unsafe { std::ptr::read_unaligned(a.as_ptr().add(offset) as *const usize) };
+        let b_word = unsafe { std::ptr::read_unaligned(b.as_ptr().add(offset) as *const usize) };
+        let diff = a_word ^ b_word;
+
+        if diff != 0 {
+            return Some(offset + first_diff_byte_in_word(diff));
+        }
+
+        offset += WORD_BYTES;
+    }
+
+    while offset < min_len {
+        if a[offset] != b[offset] {
+            return Some(offset);
+        }
+        offset += 1;
+    }
+
+    None
+}
+
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+fn first_diff_byte_in_word(diff: usize) -> usize {
+    #[cfg(target_endian = "little")]
+    {
+        diff.trailing_zeros() as usize / 8
+    }
+
+    #[cfg(target_endian = "big")]
+    {
+        diff.leading_zeros() as usize / 8
+    }
+}
+
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+fn first_diff_byte_in_all_ones_mask_u64(eq_mask: u64) -> usize {
+    #[cfg(target_endian = "little")]
+    {
+        (!eq_mask).trailing_zeros() as usize / 8
+    }
+
+    #[cfg(target_endian = "big")]
+    {
+        (!eq_mask).leading_zeros() as usize / 8
+    }
 }
 
 fn generate_data_with_common_prefix(size: usize, common_prefix_ratio: f64) -> (Vec<u8>, Vec<u8>) {
@@ -227,8 +297,8 @@ fn bench_bytes_cmp(c: &mut Criterion) {
         });
 
         #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-        group.bench_with_input(BenchmarkId::new("simd", size), size, |bench, _| {
-            bench.iter(|| bytes_cmp_simd(black_box(&a), black_box(&b)))
+        group.bench_with_input(BenchmarkId::new("optimized", size), size, |bench, _| {
+            bench.iter(|| bytes_cmp_optimized(black_box(&a), black_box(&b)))
         });
     }
 
@@ -247,8 +317,8 @@ fn bench_bytes_cmp_identical(c: &mut Criterion) {
         });
 
         #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-        group.bench_with_input(BenchmarkId::new("simd", size), size, |bench, _| {
-            bench.iter(|| bytes_cmp_simd(black_box(&data), black_box(&data)))
+        group.bench_with_input(BenchmarkId::new("optimized", size), size, |bench, _| {
+            bench.iter(|| bytes_cmp_optimized(black_box(&data), black_box(&data)))
         });
     }
 
@@ -269,8 +339,8 @@ fn bench_bytes_cmp_early_mismatch(c: &mut Criterion) {
         });
 
         #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
-        group.bench_with_input(BenchmarkId::new("simd", size), size, |bench, _| {
-            bench.iter(|| bytes_cmp_simd(black_box(&a), black_box(&b)))
+        group.bench_with_input(BenchmarkId::new("optimized", size), size, |bench, _| {
+            bench.iter(|| bytes_cmp_optimized(black_box(&a), black_box(&b)))
         });
     }
 

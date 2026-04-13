@@ -1,107 +1,12 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
-#[cfg(target_arch = "x86_64")]
-use std::arch::x86_64::*;
-
-#[cfg(target_arch = "aarch64")]
-use std::arch::aarch64::*;
+use super::scan::first_mismatch;
 
 #[inline]
-#[cfg(target_arch = "x86_64")]
 pub(crate) fn common_prefix_len_simd(a: &[u8], b: &[u8]) -> u16 {
     let min_len = std::cmp::min(a.len(), b.len());
-
-    if min_len < 16 {
-        return common_prefix_len_scalar(a, b);
-    }
-
-    let mut prefix_len: usize = 0;
-
-    unsafe {
-        while prefix_len + 16 <= min_len {
-            let a_chunk = _mm_loadu_si128(a.as_ptr().add(prefix_len) as *const __m128i);
-            let b_chunk = _mm_loadu_si128(b.as_ptr().add(prefix_len) as *const __m128i);
-
-            let cmp = _mm_cmpeq_epi8(a_chunk, b_chunk);
-            let mask = _mm_movemask_epi8(cmp) as u32;
-
-            if mask != 0xFFFF {
-                let first_diff = (!mask).trailing_zeros() as usize;
-                return (prefix_len + first_diff) as u16;
-            }
-
-            prefix_len += 16;
-        }
-    }
-
-    while prefix_len < min_len {
-        if a[prefix_len] != b[prefix_len] {
-            return prefix_len as u16;
-        }
-        prefix_len += 1;
-    }
-
-    prefix_len as u16
-}
-
-#[inline]
-#[cfg(target_arch = "aarch64")]
-pub(crate) fn common_prefix_len_simd(a: &[u8], b: &[u8]) -> u16 {
-    let min_len = std::cmp::min(a.len(), b.len());
-
-    if min_len < 16 {
-        return common_prefix_len_scalar(a, b);
-    }
-
-    let mut prefix_len: usize = 0;
-
-    unsafe {
-        while prefix_len + 16 <= min_len {
-            let a_chunk = vld1q_u8(a.as_ptr().add(prefix_len));
-            let b_chunk = vld1q_u8(b.as_ptr().add(prefix_len));
-
-            let cmp = vceqq_u8(a_chunk, b_chunk);
-            let cmp_u64: uint64x2_t = vreinterpretq_u64_u8(cmp);
-
-            let low = vgetq_lane_u64(cmp_u64, 0);
-            let high = vgetq_lane_u64(cmp_u64, 1);
-
-            if low != u64::MAX {
-                let first_diff = (!low).trailing_zeros() as usize / 8;
-                return (prefix_len + first_diff) as u16;
-            }
-            if high != u64::MAX {
-                let first_diff = 8 + (!high).trailing_zeros() as usize / 8;
-                return (prefix_len + first_diff) as u16;
-            }
-
-            prefix_len += 16;
-        }
-    }
-
-    while prefix_len < min_len {
-        if a[prefix_len] != b[prefix_len] {
-            return prefix_len as u16;
-        }
-        prefix_len += 1;
-    }
-
-    prefix_len as u16
-}
-
-#[inline]
-pub(crate) fn common_prefix_len_scalar(a: &[u8], b: &[u8]) -> u16 {
-    let mut prefix_len = 0;
-    let min_len = std::cmp::min(a.len(), b.len());
-    for i in 0..min_len {
-        if a[i] == b[i] {
-            prefix_len += 1;
-        } else {
-            break;
-        }
-    }
-    prefix_len
+    first_mismatch(a, b).unwrap_or(min_len) as u16
 }
 
 #[cfg(test)]
@@ -163,6 +68,18 @@ mod tests {
     }
 
     #[test]
+    fn test_common_prefix_past_32_byte_boundary() {
+        let mut a = vec![5u8; 80];
+        let mut b = a.clone();
+        b[63] = 4;
+        assert_eq!(common_prefix_len_simd(&a, &b), 63);
+
+        a[63] = 4;
+        b[79] = 3;
+        assert_eq!(common_prefix_len_simd(&a, &b), 79);
+    }
+
+    #[test]
     fn test_common_prefix_boundary() {
         for len in 0..100 {
             let a: Vec<u8> = (0..len).map(|i| (i % 256) as u8).collect();
@@ -185,7 +102,11 @@ mod tests {
             let simd_result = common_prefix_len_simd(&a, &b);
             let scalar_result = common_prefix_len_reference(&a, &b);
 
-            assert_eq!(simd_result, scalar_result, "Mismatch for a={:?}, b={:?}", a, b);
+            assert_eq!(
+                simd_result, scalar_result,
+                "Mismatch for a={:?}, b={:?}",
+                a, b
+            );
         }
     }
 

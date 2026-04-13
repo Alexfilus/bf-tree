@@ -1,84 +1,17 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT license.
 
-#[cfg(target_arch = "x86_64")]
-use std::arch::x86_64::*;
-
-#[cfg(target_arch = "aarch64")]
-use std::arch::aarch64::*;
-
 use std::cmp::Ordering;
 
-#[inline]
-#[cfg(target_arch = "x86_64")]
-pub(crate) fn bytes_cmp_simd(a: &[u8], b: &[u8]) -> Ordering {
-    let min_len = std::cmp::min(a.len(), b.len());
-
-    if min_len < 16 {
-        return a.cmp(b);
-    }
-
-    let mut offset = 0;
-
-    unsafe {
-        while offset + 16 <= min_len {
-            let a_chunk = _mm_loadu_si128(a.as_ptr().add(offset) as *const __m128i);
-            let b_chunk = _mm_loadu_si128(b.as_ptr().add(offset) as *const __m128i);
-
-            let cmp = _mm_cmpeq_epi8(a_chunk, b_chunk);
-            let mask = _mm_movemask_epi8(cmp) as u32;
-
-            if mask != 0xFFFF {
-                let first_diff = (!mask).trailing_zeros() as usize;
-                let idx = offset + first_diff;
-                return a[idx].cmp(&b[idx]);
-            }
-
-            offset += 16;
-        }
-    }
-
-    a[offset..].cmp(&b[offset..])
-}
+use super::scan::first_mismatch;
 
 #[inline]
-#[cfg(target_arch = "aarch64")]
 pub(crate) fn bytes_cmp_simd(a: &[u8], b: &[u8]) -> Ordering {
-    let min_len = std::cmp::min(a.len(), b.len());
-
-    if min_len < 16 {
-        return a.cmp(b);
+    if let Some(idx) = first_mismatch(a, b) {
+        return a[idx].cmp(&b[idx]);
     }
 
-    let mut offset = 0;
-
-    unsafe {
-        while offset + 16 <= min_len {
-            let a_chunk = vld1q_u8(a.as_ptr().add(offset));
-            let b_chunk = vld1q_u8(b.as_ptr().add(offset));
-
-            let cmp = vceqq_u8(a_chunk, b_chunk);
-            let cmp_u64: uint64x2_t = vreinterpretq_u64_u8(cmp);
-
-            let low = vgetq_lane_u64(cmp_u64, 0);
-            let high = vgetq_lane_u64(cmp_u64, 1);
-
-            if low != u64::MAX {
-                let first_diff = (!low).trailing_zeros() as usize / 8;
-                let idx = offset + first_diff;
-                return a[idx].cmp(&b[idx]);
-            }
-            if high != u64::MAX {
-                let first_diff = 8 + (!high).trailing_zeros() as usize / 8;
-                let idx = offset + first_diff;
-                return a[idx].cmp(&b[idx]);
-            }
-
-            offset += 16;
-        }
-    }
-
-    a[offset..].cmp(&b[offset..])
+    a.len().cmp(&b.len())
 }
 
 #[cfg(test)]
@@ -142,6 +75,18 @@ mod tests {
     }
 
     #[test]
+    fn test_bytes_cmp_difference_after_32_byte_boundary() {
+        let mut a = vec![7u8; 65];
+        let mut b = a.clone();
+        b[48] = 8;
+        assert_eq!(bytes_cmp_simd(&a, &b), Ordering::Less);
+
+        a[64] = 9;
+        b[64] = 9;
+        assert_eq!(bytes_cmp_simd(&a, &b), Ordering::Less);
+    }
+
+    #[test]
     fn test_simd_matches_scalar() {
         use rand_test::Rng;
         let mut rng = rand_test::rng();
@@ -155,7 +100,11 @@ mod tests {
             let simd_result = bytes_cmp_simd(&a, &b);
             let scalar_result = a.cmp(&b);
 
-            assert_eq!(simd_result, scalar_result, "Mismatch for a={:?}, b={:?}", a, b);
+            assert_eq!(
+                simd_result, scalar_result,
+                "Mismatch for a={:?}, b={:?}",
+                a, b
+            );
         }
     }
 
