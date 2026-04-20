@@ -1,0 +1,113 @@
+warning: function `first_diff_byte_in_all_ones_mask_u64` is never used
+   --> /opt/rust-projects/bf-tree/src/simd/scan.rs:219:4
+    |
+219 | fn first_diff_byte_in_all_ones_mask_u64(eq_mask: u64) -> usize {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `bf-tree` (lib) generated 1 warning
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.08s
+     Running `target/release/bftree`
+============================================================
+Loading data...
+Loading: 1562500/100000000
+Loading: 3125000/100000000
+Loading: 4687500/100000000
+Loading: 6250000/100000000
+Loading: 7812500/100000000
+Loading: 10937500/100000000
+Loading: 9375000/100000000
+Loading: 12500000/100000000
+Loading: 14062500/100000000
+Loading: 15625000/100000000
+Loading: 17187500/100000000
+Loading: 18750000/100000000
+Loading: 20312500/100000000
+Loading: 21875000/100000000
+Loading: 23437500/100000000
+Loading: 25000000/100000000
+Loading: 26562500/100000000
+Loading: 28125000/100000000
+Loading: 29687500/100000000
+Loading: 31250000/100000000
+Loading: 32812500/100000000
+Loading: 34375000/100000000
+Loading: 35937500/100000000
+Loading: 37500000/100000000
+Loading: 39062500/100000000
+Loading: 40625000/100000000
+Loading: 42187500/100000000
+Loading: 43750000/100000000
+Loading: 45312500/100000000
+Loading: 46875000/100000000
+Loading: 48437500/100000000
+Loading: 50000000/100000000
+Loading: 51562500/100000000
+Loading: 53125000/100000000
+Loading: 54687500/100000000
+Loading: 56250000/100000000
+Loading: 57812500/100000000
+Loading: 59375000/100000000
+Loading: 60937500/100000000
+Loading: 62500000/100000000
+Loading: 64062500/100000000
+Loading: 65625000/100000000
+Loading: 67187500/100000000
+Loading: 68750000/100000000
+Loading: 70312500/100000000
+Loading: 71875000/100000000
+Loading: 73437500/100000000
+Loading: 75000000/100000000
+Loading: 76562500/100000000
+Loading: 78125000/100000000
+Loading: 79687500/100000000
+Loading: 81250000/100000000
+Loading: 82812500/100000000
+Loading: 84375000/100000000
+Loading: 85937500/100000000
+Loading: 87500000/100000000
+Loading: 89062500/100000000
+Loading: 90625000/100000000
+Loading: 92187500/100000000
+Loading: 93750000/100000000
+Loading: 95312500/100000000
+Loading: 96875000/100000000
+Loading: 98437500/100000000
+Loading: 100000000/100000000
+finished in 93.35s
+============================================================
+Running benchmark for 10 seconds with 32 threads: bftreebench-inmemory
+Iteration 0 finished------------------
+Throughput: 1111974 ops/sec
+
+Iteration 1 finished------------------
+Throughput: 1240370 ops/sec
+
+Iteration 2 finished------------------
+Throughput: 1339088 ops/sec
+
+Iteration 3 finished------------------
+Throughput: 1415471 ops/sec
+
+Iteration 4 finished------------------
+Throughput: 1449885 ops/sec
+
+============================================================
+Running benchmark for 10 seconds with 32 threads: bftreebench-inmemory
+Iteration 0 finished------------------
+Throughput: 1536640 ops/sec
+
+Iteration 1 finished------------------
+Throughput: 1659852 ops/sec
+
+Iteration 2 finished------------------
+Throughput: 1795926 ops/sec
+
+Iteration 3 finished------------------
+Throughput: 1939487 ops/sec
+
+Iteration 4 finished------------------
+Throughput: 2019087 ops/sec
+
+Benchmark results saved to file: target/benchmark/2026-04-20/11-27-bftreebench-inmemory.json

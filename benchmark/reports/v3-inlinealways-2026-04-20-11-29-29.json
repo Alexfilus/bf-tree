@@ -1,0 +1,260 @@
+{
+  "config": {
+    "name": "bftreebench-inmemory",
+    "threads": [
+      32,
+      32
+    ],
+    "time": 10,
+    "repeat": 5,
+    "record_cnt": 100000000,
+    "distribution": "Uniform",
+    "workload_mix": {
+      "read": 100,
+      "negative_read": 0,
+      "update": 0,
+      "scan": 0,
+      "insert": 0
+    },
+    "memory_size_mb": 16384,
+    "file_path": ":memory:",
+    "key_len": 16,
+    "scan_cnt": 32,
+    "storage": "Memory",
+    "read_promotion_rate": 100,
+    "copy_on_access_ratio": 0.1
+  },
+  "load": {
+    "time_elapsed": {
+      "secs": 93,
+      "nanos": 67210230
+    },
+    "user_metrics": {
+      "circular_buffer_metrics": null,
+      "metrics": null
+    }
+  },
+  "cleanup": null,
+  "env": {
+    "kernel_version": "6.8.0-106-generic",
+    "hostname": "kazik",
+    "os_version": "24.04",
+    "cpu_num": 2,
+    "physical_core_num": 2,
+    "total_memory": 16369008640
+  },
+  "run": [
+    {
+      "thread_cnt": 32,
+      "iterations": [
+        {
+          "result": {
+            "throughput": 1096675,
+            "metrics": null
+          },
+          "measurements": [
+            {
+              "name": "disk_io",
+              "value": {
+                "bytes_read": 0,
+                "bytes_written": 0
+              }
+            }
+          ]
+        },
+        {
+          "result": {
+            "throughput": 1228105,
+            "metrics": null
+          },
+          "measurements": [
+            {
+              "name": "disk_io",
+              "value": {
+                "bytes_read": 0,
+                "bytes_written": 0
+              }
+            }
+          ]
+        },
+        {
+          "result": {
+            "throughput": 1254526,
+            "metrics": null
+          },
+          "measurements": [
+            {
+              "name": "disk_io",
+              "value": {
+                "bytes_read": 0,
+                "bytes_written": 0
+              }
+            }
+          ]
+        },
+        {
+          "result": {
+            "throughput": 1368689,
+            "metrics": null
+          },
+          "measurements": [
+            {
+              "name": "disk_io",
+              "value": {
+                "bytes_read": 0,
+                "bytes_written": 0
+              }
+            }
+          ]
+        },
+        {
+          "result": {
+            "throughput": 1467766,
+            "metrics": null
+          },
+          "measurements": [
+            {
+              "name": "disk_io",
+              "value": {
+                "bytes_read": 0,
+                "bytes_written": 0
+              }
+            }
+          ]
+        }
+      ],
+      "on_thread_finished": {
+        "circular_buffer_metrics": {
+          "allocated_cnt": 1542340,
+          "begin_tombstone_cnt": 0,
+          "capacity": 17179869184,
+          "evicted_cnt": 0,
+          "evicting_addr": 0,
+          "free_listed_cnt": 236704,
+          "head_addr": 0,
+          "head_tail_distance": 3888495136,
+          "not_ready_cnt": 0,
+          "ready_cnt": 1293691,
+          "size_cnt": {
+            "128": 46330,
+            "1600": 267698,
+            "2048": 208122,
+            "256": 64077,
+            "4096": 686817,
+            "448": 98919,
+            "832": 170377
+          },
+          "tail_addr": 3888495136,
+          "tombstone_cnt": 11945,
+          "tombstone_size": 9824384
+        }
+      }
+    },
+    {
+      "thread_cnt": 32,
+      "iterations": [
+        {
+          "result": {
+            "throughput": 1482684,
+            "metrics": null
+          },
+          "measurements": [
+            {
+              "name": "disk_io",
+              "value": {
+                "bytes_read": 0,
+                "bytes_written": 0
+              }
+            }
+          ]
+        },
+        {
+          "result": {
+            "throughput": 1618845,
+            "metrics": null
+          },
+          "measurements": [
+            {
+              "name": "disk_io",
+              "value": {
+                "bytes_read": 0,
+                "bytes_written": 0
+              }
+            }
+          ]
+        },
+        {
+          "result": {
+            "throughput": 1742566,
+            "metrics": null
+          },
+          "measurements": [
+            {
+              "name": "disk_io",
+              "value": {
+                "bytes_read": 0,
+                "bytes_written": 0
+              }
+            }
+          ]
+        },
+        {
+          "result": {
+            "throughput": 1884605,
+            "metrics": null
+          },
+          "measurements": [
+            {
+              "name": "disk_io",
+              "value": {
+                "bytes_read": 0,
+                "bytes_written": 0
+              }
+            }
+          ]
+        },
+        {
+          "result": {
+            "throughput": 1962860,
+            "metrics": null
+          },
+          "measurements": [
+            {
+              "name": "disk_io",
+              "value": {
+                "bytes_read": 0,
+                "bytes_written": 0
+              }
+            }
+          ]
+        }
+      ],
+      "on_thread_finished": {
+        "circular_buffer_metrics": {
+          "allocated_cnt": 1803986,
+          "begin_tombstone_cnt": 0,
+          "capacity": 17179869184,
+          "evicted_cnt": 0,
+          "evicting_addr": 0,
+          "free_listed_cnt": 410744,
+          "head_addr": 0,
+          "head_tail_distance": 4962290320,
+          "not_ready_cnt": 0,
+          "ready_cnt": 1380845,
+          "size_cnt": {
+            "128": 46330,
+            "1600": 267698,
+            "2048": 208122,
+            "256": 64077,
+            "4096": 948463,
+            "448": 98919,
+            "832": 170377
+          },
+          "tail_addr": 4962290320,
+          "tombstone_cnt": 12397,
+          "tombstone_size": 10428032
+        }
+      }
+    }
+  ]
+}
