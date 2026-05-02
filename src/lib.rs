@@ -2,6 +2,7 @@
 // Licensed under the MIT license.
 
 #![doc = include_str!("../README.md")]
+#![feature(portable_simd)]
 pub mod circular_buffer;
 mod config;
 mod error;
